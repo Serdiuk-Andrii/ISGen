@@ -9,6 +9,71 @@ from profilehooks import profile, timecall
 
 
 @attr.s
+class BoundaryHist(object):
+    """
+    Explain how dists will be used later
+    """
+    all_contrib_hists = attr.ib()
+    ind_dict = attr.ib()
+
+    known_allele_contribs = attr.ib(default=attr.Factory(dict))
+
+    def get_allele_contribs(self, inds, parent_genotypes):
+        """
+        Calculates the probability of each ind in `inds` having produced the
+        observed `x` alleles in a sample of size `n` in a population of size
+        `N`, where x = range(0, k+1). Genotypes in `parent_genotypes` affect
+        how likely these inds are to carry an affected allele
+        """
+        ## Keys are stored as (ind, parent_genotype) tuples
+        ind_genotype_pairs = zip(inds, parent_genotypes)
+
+        ## Pull out inds who we have already calculated
+        known_pairs = set(self.known_allele_contribs.keys())
+        unknown_pairs = list(set(ind_genotype_pairs).difference(known_pairs))
+        print(unknown_pairs)
+
+        ## If we have calculated all inds already, we're done
+        if len(unknown_pairs) == 0:
+            P_x_dists = [self.known_allele_contribs[pair]
+                                                for pair in ind_genotype_pairs]
+
+            return scipy.sparse.vstack(P_x_dists)
+
+        # print "Calculating", len(unknown_pairs), "new dists"
+
+        ## Get allele contribution hists and parent genotypes for unknown inds
+        unknown_inds, unknown_genotypes = zip(*unknown_pairs)
+        unknown_hist_indices = [self.ind_dict[ind] for ind in unknown_inds]
+        unknown_contribs = self.all_contrib_hists[unknown_hist_indices]
+
+        ## Normalize contributions of boundary inds, to convert counts to
+        ## probabilities
+        unknown_probs = normalize_sparse_array(unknown_contribs)
+
+        ## Adjust contributions given that inds are in the boundary of the
+        ## allele transmission tree, and may not receive an affected allele
+        ## from their parents
+        new_boundary_contribs = boundary_contribution(unknown_probs,
+                                                            unknown_genotypes)
+
+        ## Get the likelihood of each boundary ind having produced the
+        ## observed allele frequency parameters, ie. P(k) given N, n
+        # boundary_control_liks = ind_control_liks(new_boundary_contribs,
+        #                                                 self.N, self.n, self.k)
+
+        ## Add result to known allele contribs
+        # for pair, row in zip(unknown_pairs, boundary_control_liks):
+        #     self.known_allele_contribs[pair] = row
+        #
+        # ## Return P_x distribs for all inds
+        # P_x_dists = [self.known_allele_contribs[pair]
+        #                                     for pair in ind_genotype_pairs]
+
+        return new_boundary_contribs
+
+
+@attr.s
 class IndContribs(object):
     """
     Explain how dists will be used later
@@ -95,7 +160,6 @@ def boundary_contribution(ind_contribs, parent_genotypes):
     that corresponds with their parents having the genotypes specified in
     `parent_genotypes`
     """
-    ## DONE: Convert to lil_matrix before modifying entries +p1 id:166
     ## Convert to lil_matrix for more efficient manipulation of values
     boundary_contribs = ind_contribs.tolil().astype(np.float64)
 
