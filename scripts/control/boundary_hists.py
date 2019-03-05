@@ -14,6 +14,7 @@ import tables
 import argparse
 import attr
 import pandas as pd
+import warnings
 from profilehooks import profile, timecall
 import regional_freq as freq
 
@@ -108,14 +109,6 @@ def get_tree_distributions(T, all_contribs):
     return tree_expectations
 
 
-def init_array(outfile, array_name):
-    """ Initialize extendable arrays to store control likelihoods """
-    with tables.open_file(outfile, 'w') as f:
-        title = 'Likelihood of tree having produced the observed allele freq'
-        f.create_earray(f.root, array_name, atom=tables.FloatAtom(),
-                                title=title, shape=(0,))
-
-
 def write_posteriors(outfile, posteriors, tot_liks):
     """ Writes posterior probabilities and total liks to hdf5 file """
     with tables.open_file(outfile, 'a') as f:
@@ -196,57 +189,67 @@ def get_tot_posteriors(climb_outfile, control_outfile):
     return posteriors.values, lik_data['tot_log2lik'].values
 
 
-# @profile
+def write_regional_distributions(outfile, region, tree_dists):
+    """
+    Writes expected regional allele frequencies over all simulated trees,
+    as well as for each individual tree.
+    """
+    ## Filters for compression
+    filters = tables.Filters(complevel=5, complib='blosc')
+
+    ## Write expected allele frequency for each tree for the region
+    with tables.open_file(outfile, 'a') as f:
+        ## Suppress warning about naming convention
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            ca = f.create_carray(f.root, region, tables.FloatAtom(),
+                        shape=tree_dists.shape, filters=filters)
+        ca[:] = tree_dists
+
+
 def main(args):
     ## Parse CLI args
     pedfile = os.path.expanduser(args.pedfile)
     climb_outfile = os.path.expanduser(args.climb_likfile)
     contribfile = os.path.expanduser(args.contrib_file)
     outfile = os.path.expanduser(args.outfile)
-
-    ## Set verbose flag
     vprint.verbose = args.verbose
 
     vprint("Loading pedigree...")
     T = calc.Tree(pedfile, climb_outfile)
     vprint("Done.")
 
-    ## Load contributions of all inds in pedigree
-    ## IDEA: Could calculate likelihood of observed regional freqs +p5 id:115
-    regions = freq.load_regions_h5(contribfile)
-    region_hists = load_regional_contribs(contribfile, regions)
-
-    ## Initialize extendable arrays to store control likelihoods
-    init_array(outfile, array_name='control_liks')
-
     ## Create a dictionary of indices for all individuals, so we can locate
     ## them in the contrib file
     ind_dict = dict(zip(T.inds, np.arange(len(T.inds))))
 
-    ## Instantiate class for handling storage and retrieval of individual
-    ## allele contribution probabilities
+    ## Load contributions of all inds in pedigree
+    regions = freq.load_regions_h5(contribfile)
+    region_hists = load_regional_contribs(contribfile, regions)
+
     for region in regions:
         C = conv_utils.BoundaryHist(region_hists[region], ind_dict)
 
-        vprint("Starting control likelihood calculations...")
-        total_prob = 0
+        all_hists = []
+        for tree_num in range(len(T.alltrees)):
+            ## We load the allele frequency distributions of the
+            ## boundary individuals only, as they are needed.
+            inds, parent_genotypes = get_boundary(T, tree_num, region_hists[region])
 
-        ## Test with first tree
-        tree_num = 0
+            ## Get allele contribution probabilities for each ind in the boundary
+            boundary_control_liks = C.get_allele_contribs(inds, parent_genotypes)
+            import IPython; IPython.embed()
 
-        ## We load the allele frequency distributions of the
-        ## boundary individuals only, as they are needed.
-        inds, parent_genotypes = get_boundary(T, tree_num, region_hists[region])
+            ## Calculate likelihood of this tree having produced the observed
+            # ## allele frequency
+            # tree_control_lik = conv_utils.sum_control_liks(boundary_control_liks, k)
 
-        ## Get allele contribution probabilities for each ind in the boundary
-        boundary_control_liks = C.get_allele_contribs(inds, parent_genotypes)
+            freq_dist = conv_utils.sum_control_liks(boundary_control_liks)
+            all_hists.append(freq_dist)
 
-        ## Calculate likelihood of this tree having produced the observed
-        # ## allele frequency
-        # tree_control_lik = conv_utils.sum_control_liks(boundary_control_liks, k)
-
-        freq_dist = conv_utils.sum_control_liks(boundary_control_liks)
-        print(freq_dist)
+        all_hists = np.array(all_hists)
+        write_regional_distributions(outfile, region, all_hists)
+        # print(freq_dist)
 
     import IPython; IPython.embed()
     
