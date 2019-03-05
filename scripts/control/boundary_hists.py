@@ -15,6 +15,7 @@ import argparse
 import attr
 import pandas as pd
 from profilehooks import profile, timecall
+import regional_freq as freq
 
 
 class VPrint(object):
@@ -33,6 +34,78 @@ class VPrint(object):
 
 ## Instantiate printing class globally
 vprint = VPrint()
+
+
+def get_regional_distributions(T, regions, contrib_h5):
+    ## Open allele dropping contribution results
+    f = tables.open_file(contrib_h5, 'r')
+    node_dict = {node.name.strip(): node
+                    for node in f.list_nodes(f.root.sparse_hist)}
+
+    ## Store freqs and number of probands in each region in a dict
+    expected_freqs = {}
+    ninds_dict = {}
+
+    for region in regions:
+        vprint("Loading contributions to region", region)
+        ## data stored in sparse format as row, col, dat
+        region_node = node_dict[region]
+        all_contribs, ninds_region = freq.load_sparse_contribs(region_node)
+        import IPython; IPython.embed()
+        ninds_dict[region] = ninds_region
+
+        ## Load regional contributions and parent genotypes of inds in the
+        ## boundary of each tree
+        expected_freqs[region] = get_tree_expectations(T, all_contribs)
+
+    f.close()
+
+    return expected_freqs, ninds_dict
+
+
+def get_tree_distributions(T, all_contribs):
+    """
+    Returns a list of allele frequency distributions for the individuals
+    in each tree in T, along with the parent genotypes of each ind in the
+    boundary of the trees.
+    """
+    print "Calculating expectations of trees..."
+
+    ## Store ind contributions in a dict
+    ind_contrib_dict = {}
+    tree_expectations = np.zeros(len(T.alltrees))
+
+    for i, tree in enumerate(T.alltrees):
+        if i % 1000 == 0:
+            print i, '/', len(T.alltrees)
+        ## Get the boundary inds who have not been calculated already,
+        ## and the genotypes of their parents
+        boundary_dict = T.getboundary(i)
+        boundary_inds, genotypes = zip(*boundary_dict.items())
+        new_inds = [ind for ind in boundary_inds if ind not in ind_contrib_dict]
+
+        if len(new_inds) > 0:
+            ## Locate boundary inds in indlist
+            boundary_indices = np.array([T.ind_dict[ind] for ind in new_inds])
+
+            ## Group ind contribs for the tree and normalize
+            raw_contribs = all_contribs[boundary_indices].tocoo()
+            contribs = normalize_sparse_rows(raw_contribs)
+
+            ## Calculate expected regional allele frequencies of each tree
+            boundary_weights = get_genotype_weights(genotypes)
+            expectations = sparse_expectation(contribs, boundary_weights)
+
+            ## Store new expectations in contrib dict
+            new_contribs = {ind: e for ind, e in
+                                zip(new_inds, expectations)}
+            ind_contrib_dict.update(new_contribs)
+
+        ## Sum expectations of boundary inds to get total for the tree
+        tree_expectation = [ind_contrib_dict[ind] for ind in boundary_inds]
+        tree_expectations[i] = np.sum(tree_expectation)
+
+    return tree_expectations
 
 
 def init_array(outfile, array_name):
@@ -54,15 +127,19 @@ def write_posteriors(outfile, posteriors, tot_liks):
         f.create_array(f.root, 'tot_liks', tot_liks, title=title)
 
 
-def load_contribs(contribfile):
+def load_regional_contribs(contribfile, regions):
     ## Load allele frequency distributions for all individuals, over
     ## all probands
-    with tables.open_file(contribfile, 'r') as f:
-        global_contrib_node = f.get_node(f.root.sparse_hist, 'All Probands')
-        x = np.transpose(global_contrib_node[:]).reshape(3, -1)
-        all_hists = scipy.sparse.csr_matrix((x[2], (x[0], x[1])))
+    region_contribs = {}
 
-    return all_hists
+    with tables.open_file(contribfile, 'r') as f:
+        for region in regions:
+            global_contrib_node = f.get_node(f.root.sparse_hist, region)
+            x = np.transpose(global_contrib_node[:]).reshape(3, -1)
+            all_hists = scipy.sparse.csr_matrix((x[2], (x[0], x[1])))
+            region_contribs[region] = all_hists
+
+    return region_contribs
 
 
 def get_boundary(T, treenum, all_contribs):
@@ -136,7 +213,8 @@ def main(args):
 
     ## Load contributions of all inds in pedigree
     ## IDEA: Could calculate likelihood of observed regional freqs +p5 id:115
-    all_hists = load_contribs(contribfile)
+    regions = freq.load_regions_h5(contribfile)
+    region_hists = load_regional_contribs(contribfile, regions)
 
     ## Initialize extendable arrays to store control likelihoods
     init_array(outfile, array_name='control_liks')
@@ -147,26 +225,28 @@ def main(args):
 
     ## Instantiate class for handling storage and retrieval of individual
     ## allele contribution probabilities
-    C = conv_utils.BoundaryHist(all_hists, ind_dict)
+    for region in regions:
+        C = conv_utils.BoundaryHist(region_hists[region], ind_dict)
 
-    vprint("Starting control likelihood calculations...")
-    total_prob = 0
+        vprint("Starting control likelihood calculations...")
+        total_prob = 0
 
-    ## Test with first tree
-    tree_num = 0
+        ## Test with first tree
+        tree_num = 0
 
-    ## We load the allele frequency distributions of the
-    ## boundary individuals only, as they are needed.
-    inds, parent_genotypes = get_boundary(T, tree_num, all_hists)
+        ## We load the allele frequency distributions of the
+        ## boundary individuals only, as they are needed.
+        inds, parent_genotypes = get_boundary(T, tree_num, region_hists[region])
 
-    ## Get allele contribution probabilities for each ind in the boundary
-    boundary_control_liks = C.get_allele_contribs(inds, parent_genotypes)
+        ## Get allele contribution probabilities for each ind in the boundary
+        boundary_control_liks = C.get_allele_contribs(inds, parent_genotypes)
 
-    ## Calculate likelihood of this tree having produced the observed       
-    # ## allele frequency                                                     
-    # tree_control_lik = conv_utils.sum_control_liks(boundary_control_liks, k)
+        ## Calculate likelihood of this tree having produced the observed
+        # ## allele frequency
+        # tree_control_lik = conv_utils.sum_control_liks(boundary_control_liks, k)
 
-    freq_dist = conv_utils.sum_control_liks(boundary_control_liks)
+        freq_dist = conv_utils.sum_control_liks(boundary_control_liks)
+        print(freq_dist)
 
     import IPython; IPython.embed()
     
@@ -184,8 +264,8 @@ if __name__ == "__main__":
                         help="File containing results of climbing simulations",
                         required=True)
     requiredNamed.add_argument("-o", "--outfile", metavar='',
-                        help="File to store control likelihoods for each " +\
-                        "tree, in hdf5 format", required=True)
+                        help="File to store allele frequency distributions" +\
+                        "for each region, and each tree", required=True)
     requiredNamed.add_argument("-c", "--contrib-file", metavar='',
                         help="File containing results of allele dropping " +\
                             "simulations, for all individuals in --pedfile",

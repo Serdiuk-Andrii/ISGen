@@ -31,7 +31,6 @@ class BoundaryHist(object):
         ## Pull out inds who we have already calculated
         known_pairs = set(self.known_allele_contribs.keys())
         unknown_pairs = list(set(ind_genotype_pairs).difference(known_pairs))
-        print(unknown_pairs)
 
         ## If we have calculated all inds already, we're done
         if len(unknown_pairs) == 0:
