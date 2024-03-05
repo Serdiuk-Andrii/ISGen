@@ -4,30 +4,32 @@ Created on Tue Aug 18 21:14:44 2015
 
 @author: dom
 """
-from __future__ import division
-import sys,os
-import numpy as np
-from collections import defaultdict
+
 import argparse
-import csv
-import scipy.sparse
 import itertools
-import tables
+import os
+import sys
 import warnings
+from collections import defaultdict
+
+import numpy as np
+import tables
+
 import control_calc as calc
 import hdf5_to_sparse
+from ..tools.VPrint import VPrint
 
 
 def initialize_hf_arrays(tot_ninds, region_dict, niter, h5file):
-    ##TODO Might want to check if file exists already... will overwrite
+    # TODO Might want to check if file exists already... will overwrite
     f = tables.open_file(h5file, 'w')
     g = f.create_group(f.root, 'raw')
     fill = np.zeros((tot_ninds, niter))
 
-    ## Create the blank contrib file
-    for region, inds in region_dict.iteritems():
+    # Create the blank contrib file
+    for region, inds in region_dict.items():
         filters = tables.Filters(complevel=5, complib='blosc')
-        ## Suppress warning about naming convention
+        # Suppress warning about naming convention
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             ca = f.create_carray(g, region,
@@ -36,7 +38,7 @@ def initialize_hf_arrays(tot_ninds, region_dict, niter, h5file):
         ca[:] = fill
         ca.attrs.ninds = len(inds)
 
-    ## Close the file
+    # Close the file
     f.close()
 
     return None
@@ -47,17 +49,17 @@ def increment_h5_counts(regions, iteration, sparse_contribs, h5file):
     sparse_contribs = sparse_contribs.tocoo()
 
     try:
-        ## Append the new contributions
+        # Append the new contributions
         for i, j, k, in itertools.izip(sparse_contribs.row, sparse_contribs.col,
                                                         sparse_contribs.data):
             rg = f.get_node(f.root.raw, regions[j])
             rg[i, iteration] = k
     except:
-        ## Make sure the file is closed if anything goes wrong
+        # Make sure the file is closed if anything goes wrong
         f.close()
         raise
 
-    ## Close the file
+    # Close the file
     f.close()
 
     return None
@@ -83,21 +85,7 @@ def load_regions(regionfile, delimiter=None):
     return region_dict
 
 
-class VPrint(object):
-    def __init__(self):
-        """ Easily turn print output on/off """
-        self.verbose = False
-
-    def __call__(self, *args):
-        if self.verbose:
-            # Print each argument separately so caller doesn't need to
-            # stuff everything to be printed into a single string
-            for arg in args:
-                print arg,
-
-            print
-
-## Instantiate printing class globally
+# Instantiate printing class globally
 vprint = VPrint()
 
 
@@ -106,7 +94,7 @@ def main(args):
     outfile = os.path.expanduser(args.outfile)
     iterations = args.iterations
 
-    ## Set verbose flag
+    # Set verbose flag
     vprint.verbose = args.verbose
 
     vprint(("Loading pedigree..."))
@@ -126,7 +114,7 @@ def main(args):
 
     regions = sorted(region_dict.keys())
 
-    ## Create the database which will be written to every iteration.
+    # Create the database which will be written to every iteration.
     initialize_hf_arrays(len(P.inds), region_dict, iterations, outfile)
 
     for k in range(iterations):
@@ -137,18 +125,18 @@ def main(args):
 
         vprint(("Collecting allele counts per region..."))
         contribs = P.get_contrib(alleles, region_dict)
-        ## Regions are sorted so that indices match with values returned from
-        ## simulations in control_calc.py
+        # Regions are sorted so that indices match with values returned from
+        # simulations in control_calc.py
         vprint(("Done."))
 
         vprint(("Adding allele counts to total"))
-        ## Increase each (ind, region, value) entry by 1.
+        # Increase each (ind, region, value) entry by 1.
         increment_h5_counts(regions, k, contribs, outfile)
         vprint(("Done."))
 
     vprint(("Allele dropping complete."))
 
-    ## Write sparse allele frequency histograms to same output file
+    # Write sparse allele frequency histograms to same output file
     sparse_args = argparse.Namespace(dropfile=outfile, verbose=args.verbose)
     hdf5_to_sparse.main(sparse_args)
 

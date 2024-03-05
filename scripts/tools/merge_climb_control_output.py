@@ -1,6 +1,6 @@
+import sys
+
 import tables
-import numpy as np
-import sys, os
 
 if len(sys.argv) != 5:
     print("""Usage:

@@ -1,26 +1,9 @@
-from __future__ import division
-import numpy as np
 import random
-import sys, os
 from collections import defaultdict
-from profilehooks import profile
+import numpy as np
+from ..tools.VPrint import VPrint
 
-
-class VPrint(object):
-    def __init__(self):
-        """ Easily turn print output on/off """
-        self.verbose = False
-
-    def __call__(self, *args):
-        if self.verbose:
-            # Print each argument separately so caller doesn't need to
-            # stuff everything to be printed into a single string
-            for arg in args:
-                print (arg)
-
-            print('')
-
-## Instantiate printing class globally
+# Instantiate printing class globally
 vprint = VPrint()
 
 
@@ -36,38 +19,35 @@ class AncFinder:
         self.args = args
         self.inheritance_dict = defaultdict(list)
         self.signals = dict()
-        self.common_ancs = []
+        self.common_ancs = set()
         self.genotypes = dict()
-        
+
     def check_ind(self, ind):
         """
         Convenience function for checking coalescence possibilities from 'ind'
         """
         return len(self.ind_cones[ind].intersection(self.common_ancs))
 
-
     def is_founder(self, ind):
-        """ Checks if ind is a founder, ie. both parents given as '0'. """
+        """ Checks if ind is a founder, i.e. both parents given as '0'. """
         return all(self.parent_dict[ind] == [0, 0])
-
 
     def hom_ancs(self, ind):
         """
         Check if the given individual has a path to coalescence through both
         parents, in which case they can be simulated as a homozygote.
         """
-        ## TODO: Should we always coalesce in founders? +p1  id:178
-        ## Founders are a special case since they have no parents. Their
-        ## ability to be homozygotes does not depend on ancestors other
-        ## than themselves.
+        # TODO: Should we always coalesce in founders? +p1  id:178
+        # Founders are a special case since they have no parents. Their
+        # ability to be homozygotes does not depend on ancestors other
+        # than themselves.
         if self.is_founder(ind):
-            return set([ind])
+            return {ind}
 
         gf, gm = self.parent_dict[ind]
         gp_common_ancs = self.ind_cones[gf].intersection(self.ind_cones[gm])
 
         return gp_common_ancs.intersection(self.common_ancs)
-
 
     def find_common_ancs(self, cur_carriers):
         """ Find the common ancestors among current carriers """
@@ -76,8 +56,7 @@ class AncFinder:
 
         return common_ancs
 
-
-    def initial_signals(self,ind):
+    def initial_signals(self, ind):
         """Initialisation of the signals"""
         """Sends the first signals to the probands ancestors"""
         self.signals[ind] += 1
@@ -86,8 +65,7 @@ class AncFinder:
             if ind_a != 0:
                 self.signals[ind_a] += pow(0.5, int(self.lineages[ind][ind_a]))
 
-
-    def update_signals(self,ind,parent,founders):
+    def update_signals(self, ind, parent, founders):
         """
         Updating the signals,
         step 1 : erasing the signals sent by ind
@@ -96,8 +74,8 @@ class AncFinder:
         NOTE: if parent has already received an allele, he has already sent
         his signal
         """
-        #self.signals[ind]-=1
-        
+        # self.signals[ind]-=1
+
         if self.signals[ind] < 0:
             self.signals[ind] = 0
 
@@ -114,9 +92,7 @@ class AncFinder:
             if parent not in founders:
                 for parent_a in self.lineages[parent]:
                     if parent_a != 0:
-                        self.signals[parent_a]+= pow(0.5,
-                                self.lineages[parent][parent_a])
-
+                        self.signals[parent_a] += pow(0.5, self.lineages[parent][parent_a])
 
     def sum_parent_signals_cone(self, ind, parent):
         """
@@ -125,22 +101,20 @@ class AncFinder:
         the climbing individual.
         """
         s = 0
-        s += self.signals[parent] - pow(0.5, 1) # TODO: Check why this is done
+        s += self.signals[parent] - pow(0.5, 1)  # TODO: Check why this is done
         for parent_a in self.lineages[parent]:
             if parent_a != 0:
                 parent_gen = self.lineages[parent][parent_a]
                 if parent_a in self.lineages[ind]:
                     ind_gen = self.lineages[ind][parent_a]
                     s += pow(0.5, parent_gen) * \
-                            (self.signals[parent_a] - \
-                            pow(0.5, ind_gen))
+                         (self.signals[parent_a] - pow(0.5, ind_gen))
 
         if s < 0:
             vprint("Negative signal!")
             s = 0
 
         return s
-
 
     def add_genotypes(self, ind):
         """
@@ -151,66 +125,65 @@ class AncFinder:
         """
         parent_alleles = self.genotypes[ind]
 
-        ## Most climbing scenarios (counted by number of possible
-        ## configurations, not most commonly encountered) do not involve
-        ## continuing to climb through the parent. Set this as the
-        ## default behaviour
+        # Most climbing scenarios (counted by number of possible
+        # configurations, not most commonly encountered) do not involve
+        # continuing to climb through the parent. Set this as the
+        # default behaviour
         to_climb = None
 
-        ## Initialize importance sampling likelihood
+        # Initialize importance sampling likelihood
         lik = 1.
 
-        ## If chosen parent is not a carrier yet, they receive an allele
-        ## and continue climbing
+        # If chosen parent is not a carrier yet, they receive an allele
+        # and continue climbing
         if parent_alleles == 0:
             self.genotypes[ind] += 1
             to_climb = ind
 
-        ## If chosen parent is a carrier, check if homozygote can be created
+        # If chosen parent is a carrier, check if homozygote can be created
         elif parent_alleles == 1:
-            ## If the existing allele is the only valid path, then we
-            ## use importance sampling to force coalescence, and note that
-            ## we don't have to continue climbing this path
+            # If the existing allele is the only valid path, then we
+            # use importance sampling to force coalescence, and note that
+            # we don't have to continue climbing this path
             gp_common_ancs = self.hom_ancs(ind)
             if len(gp_common_ancs) == 0:
                 lik *= 0.5
 
-            ## Otherwise we have a chance to create a valid homozygote, in
-            ## which case we continue to climb the new allele. Otherwise
-            ## we're done with this part of the lineage and do nothing
+            # Otherwise we have a chance to create a valid homozygote, in
+            # which case we continue to climb the new allele. Otherwise
+            # we're done with this part of the lineage and do nothing
             else:
                 if np.random.random() < self.args.sim_homs:
-                    ## Adjust for importance sampling favouring/not favouring
-                    ## the creation of homozygotes
+                    # Adjust for importance sampling favouring/not favouring
+                    # the creation of homozygotes
                     lik *= 0.5 / self.args.sim_homs
                     to_climb = ind
                     self.genotypes[ind] += 1
 
-                    ## Adjust common ancestors to include those of both
-                    ## grandparents, who must have both been carriers
+                    # Adjust common ancestors to include those of both
+                    # grandparents, who must have both been carriers
                     self.common_ancs = self.common_ancs.intersection(gp_common_ancs)
 
                 else:
-                    ## Adjust for importance sampling favouring/not favouring
-                    ## the creation of homozygotes
+                    # Adjust for importance sampling favouring/not favouring
+                    # the creation of homozygotes
                     lik *= 0.5 / (1 - self.args.sim_homs)
 
-        ## If chosen parent is a homozygote, we're done - no need to check
+        # If chosen parent is a homozygote, we're done - no need to check
         return lik, to_climb
-    
-    
+
     def climb_early(self, ind):
         """
         Chooses a parent allele to climb to from the given allele, ensuring
         that the choice is consistent with coalescence with the other alleles.
-        Here, we try to chose the parent that is the most likely to give early
+        Here, we try to choose the parent that is the most likely to give early
         coalescence.
         """
-        ## Initialize importance sampling likelihood
+        # Initialize importance sampling likelihood
         lik = 1.
 
-        ## Check which parents can be climbed to and still allow all alleles
-        ## to coalesce, ensuring only one allele is inherited from each parent
+        # Check which parents can be climbed to and still allow all alleles
+        # to coalesce, ensuring only one allele is inherited from each parent
         parents = self.parent_dict[ind]
         can_inherit = [p for p in parents if p not in self.inheritance_dict[ind]]
         shared_ancs = [self.check_ind(p) for p in can_inherit]
@@ -223,36 +196,37 @@ class AncFinder:
                 valid_parents.append(c)
                 num_anc_weights.append(s)
                 if self.args.kinship:
-                    signal_weights.append(self.sum_parent_signals_cone(ind,c))
+                    signal_weights.append(self.sum_parent_signals_cone(ind, c))
 
         if self.args.kinship:
             sample_weights = signal_weights
         else:
             sample_weights = num_anc_weights
 
-        ## Calculate importance sampling factor based on number of valid
-        ## parents. This will only introduce such a factor if one of two
-        ## parents is the sole direction consistent with coalescence.
+        # Calculate importance sampling factor based on number of valid
+        # parents. This will only introduce such a factor if one of two
+        # parents is the sole direction consistent with coalescence.
+        climb_parent = None
         if len(can_inherit) == 2 and len(valid_parents) == 1:
             lik *= 0.5
             climb_parent = valid_parents[0]
-            
+
         elif len(can_inherit) == 2 and len(valid_parents) == 2:
             # for c in valid_parents:
             #     signal_weights.append(self.sum_parent_signals_cone(ind,c))
             if np.sum(sample_weights) != 0:
                 sample_weights = np.array(sample_weights) / np.sum(sample_weights)
             else:
-                sample_weights=[0.5, 0.5]
-                
-            ## Weight parent choice by number of shared ancs with other
-            ## carriers
+                sample_weights = [0.5, 0.5]
+
+            # Weight parent choice by number of shared ancs with other
+            # carriers
             climb_index = np.random.choice(range(len(valid_parents)),
-                                            p=sample_weights)
+                                           p=sample_weights)
             climb_parent = valid_parents[climb_index]
             lik *= 0.5 / sample_weights[climb_index]
             self.inheritance_dict[ind].append(climb_parent)
-            
+
         elif len(can_inherit) == 1 and len(valid_parents) == 1:
             climb_parent = valid_parents[0]
         elif len(valid_parents) == 0:
@@ -260,54 +234,53 @@ class AncFinder:
             climb_parent = ind
 
         return lik, climb_parent
-    
 
     def coalesce(self, genotypes, signals):
         """
         Climbs known homozygotes and heterozygotes until they coalesce in
         a common ancestor.
         """
-        ## Initialize likelihood
+        # Initialize likelihood
         loglik = 0.
 
-        ## Track inheritance of each allele
+        # Track inheritance of each allele
         self.signals = signals
         self.genotypes = genotypes
         self.inheritance_dict = defaultdict(list)
 
-        ## Find inds to climb and common ancestors
+        # Find individuals to climb and common ancestors
         inds_to_climb = genotypes.keys()
         founders = set()
         self.common_ancs = self.find_common_ancs(inds_to_climb)
 
         for ind in inds_to_climb:
             self.initial_signals(ind)
-        
-        ## Climb alleles until they coalesce
+
+        # Climb alleles until they coalesce
         while len(inds_to_climb) > 0:
-            ## Individuals to climb next
+            # Individuals to climb next
             climb_next = []
 
-            ## Go through inds to climb in random order
+            # Go through inds to climb in random order
             for ind in random.sample(inds_to_climb, len(inds_to_climb)):
-                ## Climb each allele in the current individual
+                # Climb each allele in the current individual
                 steplik, parent = self.climb_early(ind)
-                self.update_signals(ind, parent,founders)
-                
-                ## Update genotyped of the individual climbed to
+                self.update_signals(ind, parent, founders)
+
+                # Update genotyped of the individual climbed to
                 innerlik, newclimber = self.add_genotypes(parent)
-                
-                ## Update overall likelihood from this climbing step
+
+                # Update overall likelihood from this climbing step
                 loglik += np.log2(steplik) + np.log2(innerlik)
 
-                ## Update list of common ancestors and carriers to climb,
-                ## noting that founders are denoted by having '0' for both
-                ## parents
+                # Update list of common ancestors and carriers to climb,
+                # noting that founders are denoted by having '0' for both
+                # parents
                 if newclimber is not None:
                     new_ancs = self.ind_cones[newclimber]
                     self.common_ancs = self.common_ancs.intersection(new_ancs)
 
-                    ## Check if we've climbed to a founder
+                    # Check if we've climbed to a founder
                     if self.is_founder(newclimber):
                         founders.add(newclimber)
                     else:
@@ -315,7 +288,7 @@ class AncFinder:
 
             inds_to_climb = climb_next
 
-        ## Make sure we've only selected one founder
+        # Make sure we've only selected one founder
         assert len(founders) == 1
 
         return next(iter(founders)), loglik, genotypes

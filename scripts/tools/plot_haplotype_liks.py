@@ -1,7 +1,8 @@
-import sys, os
-import tables
+import os
+import sys
+
 import matplotlib.pyplot as plt
-import seaborn
+import tables
 
 try:
     assert len(sys.argv) == 3

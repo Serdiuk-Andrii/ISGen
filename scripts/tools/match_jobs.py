@@ -1,7 +1,5 @@
-import sys, os
-import subprocess32
-import numpy as np
 import argparse
+import os
 
 
 def batch_gen_anc(batch_dir):
@@ -31,8 +29,8 @@ def load_expected_freqs(expected_freqs_file):
     freqs = []
     with open(expected_freqs_file, 'r') as f:
         for line in f:
-            ## Recover freq from string formatted as
-            ## 'Region: num_alleles/ninds_region'
+            # Recover freq from string formatted as
+            # 'Region: num_alleles/ninds_region'
             region_freq = line.split(' ')[-1].split('/')[0]
             freqs.append(region_freq)
 
@@ -52,29 +50,29 @@ def same_regional_freqs(regional_freqs_list):
 
 
 def main(args):
-    ## Read output paths to be compared
+    # Read output paths to be compared
     out_paths1 = [line.strip() for line in open(args.out_paths_file1, 'r')]
     out_paths2 = [line.strip() for line in open(args.out_paths_file2, 'r')]
     out_paths1 = map(os.path.expanduser, out_paths1) 
     out_paths2 = map(os.path.expanduser, out_paths2) 
 
-    ## To store jobs which have the same generating ancestor and regional
-    ## allele frequencies
+    # To store jobs which have the same generating ancestor and regional
+    # allele frequencies
     matching_jobs = []
 
     for i, p1 in enumerate(out_paths1):
-        ## Filter out higher-level dirs
-        ##TODO: This and same below break with trailing forward slash +p2 id:205
+        # Filter out higher-level dirs
+        #TODO: This and same below break with trailing forward slash +p2 id:205
         if "_" not in p1.split('/')[-1]:
             continue
         
         with open(os.devnull, 'w') as FNULL:
             for j, p2 in enumerate(out_paths2):
-                ## Filter out higher-level dirs
+                # Filter out higher-level dirs
                 if "_" not in p2.split('/')[-1]:
                     continue
 
-                ## Find the ancestor who generated the panel for each batch job
+                # Find the ancestor who generated the panel for each batch job
                 anc1 = batch_gen_anc(p1)
                 anc2 = batch_gen_anc(p2)
 
@@ -87,14 +85,14 @@ def main(args):
                     continue
                 
                 matching_jobs.append((p1, p2))
-                print len(matching_jobs), "matches out of", i, "jobs"
+                print(len(matching_jobs), "matches out of", i, "jobs")
 
                 with open(os.path.join(args.outpath, 'jobs1.txt'), 'a') as f:
                     f.write(p1 + '\n')
                 with open(os.path.join(args.outpath, 'jobs2.txt'), 'a') as f:
                     f.write(p2 + '\n')
 
-        ## Here we know that p2=out_paths2[j] has been added, so we can remove it
+        # Here we know that p2=out_paths2[j] has been added, so we can remove it
         if args.unique:
             del out_paths2[j]
 

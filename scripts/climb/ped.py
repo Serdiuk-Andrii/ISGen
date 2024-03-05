@@ -1,7 +1,8 @@
-from __future__ import division
+
+
+from collections import defaultdict
+
 import numpy as np
-import sys, os
-from collections import defaultdict, Counter, OrderedDict
 
 
 class Pedigree:
@@ -21,11 +22,11 @@ class Pedigree:
         self.inds = alldata[:, 0]
         self.fathers = alldata[:, 1]
         self.mothers = alldata[:, 2]
-        indices = range(len(alldata[:,0]))
-        self.ind_dict = dict(zip(alldata[:,0], indices))
+        indices = range(len(alldata[:, 0]))
+        self.ind_dict = dict(zip(alldata[:, 0], indices))
 
-        ## Build a dictionary containing the parents and offspring of
-        ## each individual
+        # Build a dictionary containing the parents and offspring of
+        # each individual
         self.parent_dict = dict(zip(self.inds, alldata[:, 1:3]))
 
         self.offspring_dict = defaultdict(list)
@@ -33,10 +34,9 @@ class Pedigree:
             self.offspring_dict[father].append(ind)
             self.offspring_dict[mother].append(ind)
 
-        ## Probands are individuals who are neither mothers nor fathers
+        # Probands are individuals who are neither mothers nor fathers
         probands = set(self.inds).difference(set(self.fathers))
         self.probands = probands.difference(set(self.mothers))
-        
 
     def ordered_lineage(self, ind):
         """
@@ -56,7 +56,7 @@ class Pedigree:
             i += 1
             next_generation = []
             for ind in current_generation:
-                ## If there are multiple paths, we save both lengths in the list
+                # If there are multiple paths, we save both lengths in the list
                 ordered_lineage[ind].append(i)
 
             for ancestor in current_generation:
@@ -69,7 +69,6 @@ class Pedigree:
             current_generation = next_generation
 
         return ordered_lineage
-
 
     def getlineage(self, ind):
         """
@@ -86,7 +85,6 @@ class Pedigree:
             lineage.extend(self.getlineage(mother))
 
         return lineage
-    
 
     def ordered_descendants(self, ind):
         """
@@ -105,7 +103,7 @@ class Pedigree:
             i += 1
             nextgen = []
             for ind in currentgen:
-                ## If there are multiple paths, we save all lengths in the list
+                # If there are multiple paths, we save all lengths in the list
                 descendants[ind].append(i)
             for offspring in currentgen:
                 nextgen.extend(self.offspring_dict[offspring])
@@ -114,26 +112,22 @@ class Pedigree:
 
         return dict(descendants)
 
-
     def useful_ancestors(self, indlist):
         """Returns from the list of probands the list of ancestors shared
         by at least 2 probands. We keep only the points where coalescence could ever happend."""
-        useful_ancs=[]
-        
+        useful_ancs = []
+
         for ind in indlist:
             for ind2 in indlist:
                 if ind2 != ind:
-                    common2 = []
-                    common2.append(set(self.ordered_lineage(ind).keys()))
-                    common2.append(set(self.ordered_lineage(ind2).keys()))
+                    common2 = [set(self.ordered_lineage(ind).keys()), set(self.ordered_lineage(ind2).keys())]
                     intersect2 = list(set.intersection(*common2))
-                    
+
                     for a in intersect2:
                         if a not in useful_ancs:
                             useful_ancs.append(a)
-            
-        return useful_ancs
 
+        return useful_ancs
 
     def ancestors_dict(self, indlist):
         """Returns a dictionary lineages containing everyone in the probands
@@ -142,33 +136,32 @@ class Pedigree:
         possible coalescence point between at least 2 people."""
         lineages = dict()
         useful_ancs = set(self.useful_ancestors(indlist))
-        
+
         for ind in indlist:
             ancs = self.ordered_ancestors(ind)
-            ## ancestors distance when the distance is < N=10 
+            # ancestors distance when the distance is < N=10
             used_ancs = useful_ancs.intersection(set(ancs.keys()))
-            
+
             lin = dict()
             for a in used_ancs:
                 lin[a] = ancs[a]
-                
+
             lineages[ind] = lin
-            
+
             for a2 in self.ordered_lineage(ind):
-                ## We need to have every person that we could climb to
-                ## in the dictionary. This is why we add everyone in 
-                ## the lineage of ind.
+                # We need to have every person that we could climb to
+                # in the dictionary. This is why we add everyone in
+                # the lineage of ind.
                 ancs_a = self.ordered_ancestors(a2)
                 used_ancs_a = useful_ancs.intersection(set(ancs_a.keys()))
                 lin_a = dict()
                 for aa in used_ancs_a:
                     lin_a[aa] = ancs_a[aa]
-                    
+
                 lineages[a2] = lin_a
-    
+
         return lineages
 
-    
     def ordered_ancestors(self, ind, N=10):
         """
         Returns the list [ancestor, generation] for each ancestor of one individual.
@@ -186,7 +179,6 @@ class Pedigree:
 
         return temp_ancs
 
-
     def allowedinds(self, indlist):
         """
         Returns:
@@ -203,29 +195,29 @@ class Pedigree:
         commonancestors = list(set.intersection(*ancestorsets))
 
         if len(commonancestors) == 0:
-            print "Warning: No common ancestors!"
+            print("Warning: No common ancestors!")
 
         cone_inds = {}
         ind_cones = defaultdict(set)
         for anc in commonancestors:
             tmp_dict = self.ordered_descendants(anc)
             tmp = set(tmp_dict.keys())
-            ## We only need to track the individuals who could possibly climb
-            ## to some point on the tree. To find these individuals, we take
-            ## the descendants of one common ancestor, and take the union of
-            ## its intersection with the lineage of every affected proband.
-            ## repeat for every common ancestor to get the descent cones.
+            # We only need to track the individuals who could possibly climb
+            # to some point on the tree. To find these individuals, we take
+            # the descendants of one common ancestor, and take the union of
+            # its intersection with the lineage of every affected proband.
+            # repeat for every common ancestor to get the descent cones.
             tmp_intersect = set()
             for ancestorset in ancestorsets:
                 tmp_intersect.update(tmp.intersection(ancestorset))
             tmp = tmp_intersect
             cone_inds[anc] = tmp
 
-            ## Build dict of cone memberships for each individual
+            # Build dict of cone memberships for each individual
             for ind in tmp:
                 ind_cones[ind].add(anc)
 
-            ## Nonexistant inds, denoted by '0', have no descendats
+            # Nonexistant inds, denoted by '0', have no descendats
             ind_cones[0] = set()
 
         return commonancestors, cone_inds, ind_cones

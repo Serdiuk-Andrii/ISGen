@@ -19,7 +19,7 @@ def build_region_dict(regionfile, all_probands, delimiter='\t'):
                           index_col=0, dtype=dict(zip(header, [int, str])))
 
     region_dict = {}
-    for region, probands in regions.groupby('Region').groups.iteritems():
+    for region, probands in regions.groupby('Region').groups.items():
         region_dict[region.strip()] = set(probands).intersection(all_probands)
 
     # Add a region containing all probands
@@ -68,10 +68,10 @@ def group_alleles(sim_data):
     allele1 = sim_data.groupby(allele_labels[1])
 
     # Combine alleles of each ind
-    for key, value in allele0.groups.iteritems():
+    for key, value in allele0.groups.items():
         allele_groups[key] += Counter(value)
 
-    for key, value in allele1.groups.iteritems():
+    for key, value in allele1.groups.items():
         allele_groups[key] += Counter(value)
 
     return allele_groups
@@ -82,7 +82,7 @@ def check_attribs(instance, attribute, value):
         if attribute.name == 'hom_het':
             assert value in ['hom', 'het']
     except:
-        print "Validation error!"
+        print("Validation error!")
         import pdb; pdb.set_trace()
         raise
 
@@ -112,7 +112,7 @@ class sorted_panels(object):
     def __attrs_post_init__(self):
         all_inds = list(self.region_dict['All Probands'])
 
-        for allele, ind_counts in self.allele_groups.iteritems():
+        for allele, ind_counts in self.allele_groups.items():
             # Pull inds out of Counter object
             inds = ind_counts.keys()
 
@@ -125,7 +125,7 @@ class sorted_panels(object):
             # NOTE: We assume we find all homozygotes in the population id:173
             # TODO: Implement sampling strategy here as well +p3 id:172
             if self.hom_het == 'hom':
-                panel = [ind for ind, count in ind_counts.iteritems()
+                panel = [ind for ind, count in ind_counts.items()
                          if count == 2]
                 not_panel = set(inds).difference(panel)
             else:
@@ -227,13 +227,13 @@ def main(args):
     probands = np.genfromtxt(simfile, max_rows=1, dtype=int, delimiter=',')
 
     # Load regions from regionfile
-    print "Loading regions..."
+    print("Loading regions...")
     if regionfile is not None:
         region_dict = build_region_dict(regionfile, probands, delimiter)
     else:
         region_dict = {'All Probands': set(probands)}
     regions = sorted(region_dict.keys())
-    print len(region_dict), "regions found"
+    print(len(region_dict), "regions found")
 
     # Load simulation results as a generator
     sims = load_simfile(probands, simfile, args.startsim, args.num_sims)
@@ -242,7 +242,7 @@ def main(args):
     ancs, panels, regional_counts = [], [], []
     for sim_data in sims:
         # Sort simulation results into clauses
-        print "Finding panels..."
+        print("Finding panels...")
         allele_groups = group_alleles(sim_data)
 
         # Separate groups of allele-sharing inds into panel (connected to
@@ -258,16 +258,15 @@ def main(args):
         regional_counts.extend(parsed_panels.regional_counts)
 
     if len(panels) == 0:
-        print "No clauses with length in range", panel_minsize, "to", +\
-                                                        panel_maxsize
+        print("No clauses with length in range", panel_minsize, "to", panel_maxsize)
         sys.exit()
 
     # Write panels to outfile. First column is the generating ancestor,
     # followed by a comma-delimited list of the probands who received their
     # alleles, followed by regional allele frequencies
-    print "Writing panels to file..."
+    print("Writing panels to file...")
     write_panels(ancs, panels, regional_counts, regions, outfile)
-    print "Done!"
+    print("Done!")
 
 
 if __name__ == "__main__":

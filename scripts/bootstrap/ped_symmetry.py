@@ -1,21 +1,19 @@
-import numpy as np
-import sys,os
-sys.path.append('../climb/')
-import ped
+import os
+import sys
+from ..climb import ped
 import argparse
 import pandas as pd
+
 
 class PedSymmetry:
     def __init__(self, P):
         self.P = P
-
 
     def get_parents(self, ind):
         mother = self.P.mothers[self.P.ind_dict[ind]]
         father = self.P.fathers[self.P.ind_dict[ind]]
 
         return mother, father
-
 
     def offspring_root_anc(self, ind, commonancs, all_lineages):
         have_path = []
@@ -29,7 +27,6 @@ class PedSymmetry:
 
         return offspring_root
 
-
     def isfounder(self, ind):
         founder = 0
         mother, father = self.get_parents(ind)
@@ -39,7 +36,6 @@ class PedSymmetry:
             founder += 0.5
 
         return founder
-
 
     def get_commonancs(self, probands):
         all_lineages = set(self.P.ordered_lineage(probands[0]).keys())
@@ -52,7 +48,6 @@ class PedSymmetry:
 
         return list(commonancs), all_lineages
 
-
     def find_partners(self, ind):
         children = self.P.offspring_dict[ind]
         partners = set()
@@ -61,14 +56,11 @@ class PedSymmetry:
 
         return tuple(sorted(set(partners)))
 
-
     def find_monogamous_partners(self, ind):
         partners = self.find_partners(ind)
         partner_partners = set()
         for partner in partners:
             partner_partners.add
-
-
 
     def find_monogamous_in_group(self, group):
         monogamous = set()
@@ -79,7 +71,6 @@ class PedSymmetry:
                 monogamous.add(ind)
 
         return list(monogamous)
-
 
     def get_root_ancs(self, probands):
         commonancs, all_lineages = self.get_commonancs(probands)
@@ -92,8 +83,8 @@ class PedSymmetry:
             for f in current_root_ancs:
                 root_offspring = self.offspring_root_anc(f, commonancs, all_lineages)
 
-                ## If root has offpsring who is also a root, we take the offspring
-                ## and remove the parent
+                # If root has offpsring who is also a root, we take the offspring
+                # and remove the parent
                 if len(root_offspring) > 0:
                     to_remove.append(f)
 
@@ -108,9 +99,8 @@ class PedSymmetry:
 
         return root_ancs
 
-
     def get_symm_inds(self, probands):
-        root_ancs = get_root_ancs(probands)
+        root_ancs = self.get_root_ancs(probands)
 
         sym_dict = {}
         for anc in root_ancs:
@@ -118,7 +108,6 @@ class PedSymmetry:
                 sym_dict[sym] = anc
 
         return sym_dict
-
 
     def write_symmetrical_inds(self, probands, outfile):
         sym_dict = self.get_symm_inds(probands, combine=True)
@@ -136,71 +125,69 @@ class PedSymmetry:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-o", "--outfile",
-                        help="Output file. Both symmetrical inds and " +\
-                        "monogamous couples will be saved in the same file")
+                        help="Output file. Both symmetrical inds and " + \
+                             "monogamous couples will be saved in the same file")
     parser.add_argument("-s", "--split",
-                        help="Display monogamous couples separately from " +\
-                        "symmetrical individuals. Any file written will " +\
-                        "still combine the two")
+                        help="Display monogamous couples separately from " + \
+                             "symmetrical individuals. Any file written will " + \
+                             "still combine the two")
 
     requiredNamed = parser.add_argument_group('required named arguments')
     requiredNamed.add_argument("-f", "--pedfile",
-                        help="File containing the pedigree to analyze",
-                        required=True)
+                               help="File containing the pedigree to analyze",
+                               required=True)
 
     requireOne = parser.add_argument_group('require one of')
     group = requireOne.add_mutually_exclusive_group(required=True)
     group.add_argument("-p", "--probandfile",
-                        help="File containing column of probands")
+                       help="File containing column of probands")
     group.add_argument("-l", "--probandlist",
-                        help="List of probands separated by commas (no spaces)")
+                       help="List of probands separated by commas (no spaces)")
     group.add_argument("-P", "--probandpaths-file",
-                        help="File containing paths of multiple proband files." +\
-                                " Writes symmetries of each panel to the same " +\
-                                "directory, in a file named 'symmetry.txt'")
+                       help="File containing paths of multiple proband files." + \
+                            " Writes symmetries of each panel to the same " + \
+                            "directory, in a file named 'symmetry.txt'")
 
     args = parser.parse_args()
 
     if args.probandpaths_file and args.outfile:
-        print "Incompatible command-like options: Cannot specify outfile for", +\
-                "batch symmetry output."
+        print("Incompatible command-like options: Cannot specify outfile for batch symmetry output.")
         sys.exit()
 
     pedfile = os.path.expanduser(args.pedfile)
 
     if args.probandfile is not None:
-        probands = map(int,[line.strip() for line in open(args.probandfile, 'rU')])
+        probands = map(int, [line.strip() for line in open(args.probandfile, 'rU')])
     if args.probandlist is not None:
         probands = map(int, args.probandlist.split(','))
     if args.probandpaths_file is not None:
         allprobands = []
         outpaths = []
         probandpaths = [line.strip() for line in
-                                        open(args.probandpaths_file, 'rU')]
+                        open(args.probandpaths_file, 'rU')]
         for path in probandpaths:
             allprobands.append(map(int, [line.strip() for line in
-                                            open(path, 'rU')]))
+                                         open(path, 'rU')]))
             outpaths.append(os.path.split(path)[0] + '/symmetry.txt')
 
-
-    print "Loading pedigree from file:", pedfile
+    print(f"Loading pedigree from file: {pedfile}")
     P = ped.Pedigree(pedfile)
-    print "Done."
-    print "Finding symmetries..."
+    print("Done.")
+    print("Finding symmetries...")
     PS = PedSymmetry(P)
 
     if args.outfile is not None:
-        print "Probands:", probands
-        print "Outputting symmetries to", args.outfile
+        print(f"Probands: {probands}")
+        print(f"Outputting symmetries to {args.outfile}")
         PS.write_symmetrical_inds(probands, args.outfile)
     elif args.probandpaths_file is not None:
         for probands, path in zip(allprobands, outpaths):
-            print "Finding symmetries for probands:", probands
+            print("Finding symmetries for probands:", probands)
             PS.write_symmetrical_inds(probands, path)
-            print "Symmetries written to:", path
+            print("Symmetries written to:", path)
     else:
-        print "Probands:", probands
-        print PS.get_symm_inds(probands)
+        print("Probands:", probands)
+        print(PS.get_symm_inds(probands))
 
 
 if __name__ == "__main__":

@@ -1,18 +1,17 @@
-import sys, os
-module_path = os.path.expanduser('~/project/anc_finder/scripts/')
-sys.path.append(module_path)
-sys.path.append(module_path + 'climb/')
-sys.path.append(module_path + 'control/')
-sys.path.append(module_path + 'msub/')
+import os
+# import sys
+# module_path = os.path.expanduser('~/project/anc_finder/scripts/')
+# sys.path.append(module_path)
+# sys.path.append(module_path + 'climb/')
+# sys.path.append(module_path + 'control/')
+# sys.path.append(module_path + 'msub/')
 import argparse
-import run
+from .. import run
 import tempfile
 import tables
-import matplotlib.pyplot as plt
-import seaborn
 import pandas as pd
 import numpy as np
-import msub_tools as mt
+from ..msub import msub_tools as mt
 
 
 def iter_panels(panels_file):
@@ -32,15 +31,15 @@ def iter_panels(panels_file):
             nobs = np.zeros(len(regions), dtype=int)
             sizes = np.zeros(len(regions), dtype=int)
             for i, r in enumerate(regions):
-                ## Offset by 2 to skip anc and panel entries
-                nobs[i] = int(line[i+2].split('/')[0])
-                sizes[i] = int(line[i+2].split('/')[1])
+                # Offset by 2 to skip anc and panel entries
+                nobs[i] = int(line[i + 2].split('/')[0])
+                sizes[i] = int(line[i + 2].split('/')[1])
 
             freqs = pd.DataFrame()
             freqs['nobs'] = nobs
             freqs['N'] = sizes
             freqs['region'] = regions
-            
+
             yield anc, panel, freqs
 
 
@@ -57,7 +56,6 @@ def write_panel(panel_inds, outfile=None):
                 f.write(str(ind) + '\n')
 
         return outfile
-
 
 
 def cleanup(fname):
@@ -78,18 +76,18 @@ def simulate(run_args, qsub_args=None):
         if qsub_args is None:
             run.main(run_args)
             freq_estimate = pd.DataFrame(read_freqs(run_args.regional_freq_outfile),
-                    columns = ['Region', 'Estimate', 'N'])
+                                         columns=['Region', 'Estimate', 'N'])
         else:
             import subprocess, time
             script_dir = os.path.expanduser('~/project/anc_finder/scripts/')
 
             command = mt.argparse_to_CLI('python run.py', run_args)
-            subprocess.call(['python ' +\
-                    script_dir + 'msub/quick_submit.py ' +\
-                    qsub_args.header_file + ' ' +\
-                    qsub_args.outdir + ' ' +\
-                    script_dir + ' ' +\
-                    command], shell=True)
+            subprocess.call(['python ' + \
+                             script_dir + 'msub/quick_submit.py ' + \
+                             qsub_args.header_file + ' ' + \
+                             qsub_args.outdir + ' ' + \
+                             script_dir + ' ' + \
+                             command], shell=True)
             time.sleep(2)
     except:
         cleanup(run_args.climb_outfile)
@@ -101,14 +99,12 @@ def simulate(run_args, qsub_args=None):
 
 
 def main(args):
-
     hetfile = None
     homfile = None
 
     panels = iter_panels(os.path.expanduser(args.panelsfile))
     true_counts = []
     estimated_counts = []
-
 
     for i, params in enumerate(panels):
         if args.num_panels > 0 and i >= args.num_panels:
@@ -120,10 +116,9 @@ def main(args):
         freq_outfile = timestamped_dir + '/freq.h5'
         anc, panel, true_freqs = params
 
-        print "Estimating allele frequency for panel", i + 1, \
-                "consisting of", panel
-        print "True simulated allele frequencies"
-        print true_freqs
+        print("Estimating allele frequency for panel", i + 1, "consisting of", panel)
+        print("True simulated allele frequencies")
+        print(true_freqs)
         true_freqs.to_csv(timestamped_dir + '/true_freqs.txt')
         if args.homhet == 'het':
             hetfile = write_panel(panel, timestamped_dir + '/hets.txt')
@@ -134,29 +129,29 @@ def main(args):
         nobs = true_freqs[true_freqs['region'] == 'All Probands']['nobs'].values[0]
         sample_size = min(1000, N)
         freq_params = str(N) + ',' + str(sample_size) + ',' + \
-                str(int(np.round(1. * sample_size * nobs / N)))
-        print "Frequency parameters:", freq_params
+                      str(int(np.round(1. * sample_size * nobs / N)))
+        print("Frequency parameters:", freq_params)
 
         run_args = argparse.Namespace(
-                climb_iterations=args.iterations,
-                contrib_outfile=os.path.expanduser(args.contribfile),
-                pedfile=os.path.expanduser(args.pedfile),
-                climb_outfile=climbfile,
-                control_outfile=controlfile,
-                freq_params=freq_params,
-                regional_freq_outfile=freq_outfile,
-                hetfile=hetfile,
-                homfile=homfile,
-                verbose=True,
-                regions_to_calculate=None, # Estimates all regions by default
-                sim_homs=0.5
-                )
+            climb_iterations=args.iterations,
+            contrib_outfile=os.path.expanduser(args.contribfile),
+            pedfile=os.path.expanduser(args.pedfile),
+            climb_outfile=climbfile,
+            control_outfile=controlfile,
+            freq_params=freq_params,
+            regional_freq_outfile=freq_outfile,
+            hetfile=hetfile,
+            homfile=homfile,
+            verbose=True,
+            regions_to_calculate=None,  # Estimates all regions by default
+            sim_homs=0.5
+        )
 
         qsub_args = None
         if args.qsub is True:
             qsub_args = argparse.Namespace(
-                    header_file=args.resource_header,
-                    outdir=timestamped_dir)
+                header_file=args.resource_header,
+                outdir=timestamped_dir)
 
         freq_estimate = simulate(run_args, qsub_args)
         if freq_estimate is not None:
@@ -172,10 +167,10 @@ def main(args):
         #
     # all_true_counts = np.vstack(true_counts)[:, 0]
     # all_est_counts = np.vstack(estimated_counts)[:, 1].astype(float)
-    # print "True freqs"
-    # print all_true_counts
-    # print "Estimated freqs"
-    # print all_est_counts
+    # print("True freqs")
+    # print(all_true_counts)
+    # print("Estimated freqs")
+    # print(all_est_counts)
     #
     # outdir = os.path.expanduser(args.outdir)
     # with open(outdir + '/freq_results.txt', 'w') as f:
@@ -195,36 +190,34 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", "--pedfile", metavar="|",
-            help="Pedigree for which to validate allele frequency estimates",
-            required=True)
+                        help="Pedigree for which to validate allele frequency estimates",
+                        required=True)
     parser.add_argument("-c", "--contribfile", metavar="|",
-            help="File containing results of pedigree-wide allele dropping" +\
-                    "simulations", required=True)
+                        help="File containing results of pedigree-wide allele dropping" + \
+                             "simulations", required=True)
     parser.add_argument("-a", "--panelsfile", metavar="|",
-            help="File containing simulated patient panels, along with " +\
-                    "associated regional allele frequencies", required=True)
+                        help="File containing simulated patient panels, along with " + \
+                             "associated regional allele frequencies", required=True)
     parser.add_argument("-i", "--iterations", metavar="|",
-            help="Number of climbing iterations to perform", type=int,
-            required=True)
+                        help="Number of climbing iterations to perform", type=int,
+                        required=True)
     parser.add_argument("-n", "--num_panels", metavar="|",
-            help="Number of panels for which to estimate allele frequencies",
-            type=int, default=-1)
+                        help="Number of panels for which to estimate allele frequencies",
+                        type=int, default=-1)
     parser.add_argument("-o", "--outdir", metavar="|",
-            help="Directory in which to store output", default='')
+                        help="Directory in which to store output", default='')
     parser.add_argument("-H", "--homhet", metavar="|",
-            help="Format ['hom' (default) | 'het'] - specify whether " +\
-                    "provided panels are homozygotes or heterozygotes",
-            default='hom')
+                        help="Format ['hom' (default) | 'het'] - specify whether " + \
+                             "provided panels are homozygotes or heterozygotes",
+                        default='hom')
     parser.add_argument('-q', '--qsub',
-            help='Flag to submit each panel as a separate job to qsub',
-            action='store_true')
+                        help='Flag to submit each panel as a separate job to qsub',
+                        action='store_true')
     parser.add_argument('-r', '--resource_header', metavar='|',
-            help='Header containing resource allocations for qsub jobs')
+                        help='Header containing resource allocations for qsub jobs')
     args = parser.parse_args()
 
     if args.qsub is True:
         assert args.resource_header is not None, "Must provide resource header"
 
     main(args)
-
-

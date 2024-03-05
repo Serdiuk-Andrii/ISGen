@@ -1,10 +1,9 @@
+import sys
+
 import tables
-import numpy as np
-import sys, os
 
 if len(sys.argv) != 3:
     print("""Usage:
-    
     python merge_output.py regional_freq_file_paths merged_freq_file
     """)
     sys.exit()

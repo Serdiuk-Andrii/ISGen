@@ -1,6 +1,7 @@
+import os
+
 import numpy as np
 import tables
-import sys, os
 
 
 def init_array(outfile, array_name):
@@ -12,19 +13,18 @@ def init_array(outfile, array_name):
 
 
 def incremental_write(liks, trees, outfile):
-    ## Placeholder for ancestor values
+    # Placeholder for ancestor values
     ancs = np.zeros(len(liks))
 
-    ## Write all output to hdf5 file, in separate nodes
+    # Write all output to hdf5 file, in separate nodes
     with tables.open_file(outfile, 'a') as f:
         f.root.liks.append(liks)
-	f.root.ancs.append(ancs)
-
-        ## Trees, which are variable-length, must be added individually
-        for i, tree in enumerate(trees):
-	    if i % 100 == 0:
-		print "tree", i
-	    tree = [int(t) for t in tree.split(',')]
+    f.root.ancs.append(ancs)
+    # Trees, which are variable-length, must be added individually
+    for i, tree in enumerate(trees):
+        if i % 100 == 0:
+            print("tree", i)
+            tree = [int(t) for t in tree.split(',')]
             genotypes = np.ones(len(tree))
             f.root.trees.append(tree)
             f.root.genotypes.append(genotypes)
@@ -37,25 +37,25 @@ climb_lik_file = '/RQusagers/dnelson/project/anc_finder/results/BALSAC/CAID_3M_a
 
 max_trees = 1000
 
-print "Loading climbing likelihoods"
+print("Loading climbing likelihoods")
 climb_liks = np.genfromtxt(climb_lik_file, skip_header=True,
 				delimiter=',', usecols=[1])[:max_trees]
-print "Loading trees"
+print("Loading trees")
 trees = [line.strip() for line in open(tree_anc_file, 'r')][:max_trees]
 
 climb_outfile = os.path.expanduser('~/temp/CAID_climb_1000.h5')
 with tables.open_file(climb_outfile, 'w') as f:
-    ## Create extendable arrays so we can incrementally write output
+    # Create extendable arrays so we can incrementally write output
     f.create_earray(f.root, 'liks', atom=tables.FloatAtom(), shape=(0,))
     f.create_earray(f.root, 'ancs', atom=tables.FloatAtom(), shape=(0,))
 
-    ## Trees, which are variable-length, must be added individually
+    # Trees, which are variable-length, must be added individually
     f.create_vlarray(f.root, 'trees', atom=tables.IntAtom())
     f.create_vlarray(f.root, 'genotypes', atom=tables.IntAtom())
 
 incremental_write(climb_liks, trees, climb_outfile)
 
-## Store control likelihoods
+# Store control likelihoods
 # control_outfile = os.path.expanduser('~/temp/CAID_control.h5')
 # 
 # init_array(control_outfile, array_name='control_liks')

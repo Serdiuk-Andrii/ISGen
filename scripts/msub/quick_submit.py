@@ -1,9 +1,8 @@
-import sys, os
+import os
 import subprocess
+import sys
 
-print sys.argv
-
-header = os.path.expanduser(sys.argv[1])
+print(sys.argv[1])
 outdir = os.path.expanduser(sys.argv[2])
 scriptdir = os.path.expanduser(sys.argv[3])
 command = ' '.join(sys.argv[4:])
